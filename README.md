@@ -1,8 +1,50 @@
-# Project Setup and Training Guide
+# Fake Job Posting Detection with Deep Learning
 
-## Environment Setup
+This project builds a deep learning classifier for detecting fraudulent job postings from structured job metadata and free-text job descriptions. With fraudulent postings making up only 866 of 17,880 samples, the project was designed around the problem of identifying the minority fraud class in an extremely imbalanced dataset.
 
-Create a Python virtual environment and install the required dependencies from `requirements.txt`.
+The final model combines an NLP branch for job-posting text with a numerical-feature branch for structured attributes. The best recorded model used custom FastText-style embeddings, a bidirectional GRU, multi-head attention pooling, and a small feed-forward network for numerical features.
+
+For the full methodology, experiments and discussion, see [`DL_Report_Group 23.pdf`](DL_Report_Group%2023.pdf).
+
+![Model architecture diagram](data/model_architecture.png)
+
+## Repository Structure
+
+```text
+.
+|-- data/
+|   |-- raw/                         # Original dataset
+|   `-- clean/                       # Cleaned/preprocessed datasets
+|-- dataset_class/                   # Custom PyTorch Dataset class
+|-- model_construction/              # Model architectures and reusable blocks
+|-- notebooks/
+|   |-- data_preprocessing.ipynb     # Cleaning, tokenization, and embedding work
+|   |-- Model_training.ipynb         # Main FastText + BiGRU model training
+|   |-- Model_training_distilbert.ipynb
+|   `-- adversarial_attack.ipynb
+|-- weights/                         # Saved model checkpoints
+|-- README_assignment.md             # Original assignment-oriented notes
+|-- requirements.txt
+`-- DL_Report_Group 23.pdf
+```
+
+## Dataset
+
+The project uses the Kaggle "Real or Fake: Fake Job Posting Prediction" dataset:
+
+https://www.kaggle.com/datasets/shivamb/real-or-fake-fake-jobposting-prediction/data
+
+The repository includes:
+
+- `data/raw/fake_job_postings.csv`
+- `data/clean/fake_job_postings_ALL.csv`
+- `data/clean/embedding_tuning.csv`
+
+The cleaned dataset is used by the main training notebook.
+
+## Setup
+
+The original project was developed in a notebook workflow. A Python virtual environment is recommended.
 
 ```bash
 py -3.10 -m venv .venv310
@@ -12,81 +54,74 @@ pip install -r requirements.txt
 jupyter lab
 ```
 
-## Training From Scratch
+Note: `requirements.txt` pins a CUDA-enabled PyTorch build. If installation fails on your machine, install the PyTorch version that matches your Python, CUDA and hardware setup from the official PyTorch instructions, then install the remaining dependencies.
 
-To train the model from scratch, ensure that:
+## Running the Project
 
-- `fake_job_postings_ALL.csv` is placed inside the `data/clean/` directory
+To reproduce the main workflow from scratch:
 
-Then open `Model_training.ipynb` and run all cells from **Dataset Loading** through **Model Training**.
+1. Open `notebooks/data_preprocessing.ipynb`.
+2. Run the preprocessing, tokenization, and embedding-related sections as needed.
+3. Open `notebooks/Model_training.ipynb`.
+4. Run the notebook from dataset loading through model training and evaluation.
 
-## Downloading Pretrained Weights
+The main training notebook expects the cleaned dataset at:
 
-To use the pre-trained model weights instead of training from scratch:
+```text
+data/clean/fake_job_postings_ALL.csv
+```
 
-1. Go to the Google Drive folder below:  
-   [Download pretrained weights](https://drive.google.com/drive/folders/1buxqOhkYUN2XV3OI7jawNvOFpSrOKMNH?usp=sharing)
+Saved model weights are stored in:
 
-2. Download both files
+```text
+weights/
+```
 
-3. Place both files in the **root directory** of the project
+## Training Time
 
-## Notebook Workflow
+Full training can take up to several hours. The main model training is manageable on a CUDA-capable GPU, but the GRU and hidden-dimension hyperparameter tuning section is computationally expensive. In the original assignment run, that tuning section took around 5 hours.
 
-Below are the main markdown sections in `Model_training.ipynb` and what each one does.
+For a quicker inspection of the project, use the existing notebooks and saved weights instead of rerunning every experiment.
 
-### 1. Dataset Loading
-- Imports all required libraries
-- Sets the Torch seed
-- Loads the cleaned dataset
+## Model Summary
 
-### 2. Train-Test-Validation Split
-- Splits the dataset into training, validation, and test sets
-- Converts values into suitable types for tensor conversion
+The primary model is implemented in `model_construction/model.py` as `FakeJobDetector`.
 
-### 3. Non-binary Value Standardisation
-- Standardises non-binary numeric columns
+It uses two branches:
 
-### 4. Loading of Fine-tuned FastText Model
-- Loads the FastText model
-- Extracts the embedding matrix
+- Text branch: token embeddings, a 2-layer bidirectional GRU and multi-head attention pooling.
+- Numerical branch: two fully connected layers with ReLU and dropout.
+- Final classifier: concatenates the text and numerical representations and outputs a binary fraud logit.
 
-### 5. Tokenizing and Encoding Tokens into Numerical Values
-- Converts text samples into numerical representations
-- Caches the processed outputs
+Training uses sigmoid focal loss to help with class imbalance, since fraudulent postings are much rarer than real postings. The model applies a sigmoid threshold during evaluation, and the notebooks include threshold tuning to explore the precision-recall tradeoff.
 
-### 6. Instantiating Datasets
-- Instantiates the custom `Dataset` and `DataLoader` classes
+Because the dataset is extremely imbalanced, overall accuracy and the F1-score for the real-posting class can look strong even when the model performs poorly on fraudulent postings. For that reason, the main evaluation focus was the `Fake` class F1-score, alongside fake-posting precision and recall.
 
-### 7. Testing Dataloader by Sampling a Batch
-- Verifies that the custom dataset class is working correctly
+A DistilBERT-based comparison model is also included in `model_construction/distilbert_model.py` and `notebooks/Model_training_distilbert.ipynb`. In that version, DistilBERT is frozen and used as a contextual embedding layer before the BiGRU and attention components.
 
-### 8. Creating the Embedding Matrix
-- Retrieves embeddings from the FastText model
-- Prepares them to be copied into the model
+## Results
 
-### 9. Model Instantiation
-- Instantiates the model architecture
+The best recorded final model was saved as:
 
-### 10. Model Training
-- Trains the model
+```text
+checkpoint = weights/best_model.pt
+```
 
-### 11. Hyperparameter Threshold Tuning
-- Tunes the sigmoid threshold value
+Recorded test-set performance at threshold `0.5`:
 
-### 12. Model Branch Evaluation
-- Compares the performance of the NLP branch and numeric branch
+| Class | Precision | Recall | F1-score | Support |
+| --- | ---: | ---: | ---: | ---: |
+| Real | 0.99 | 1.00 | 1.00 | 1702 |
+| **Fake** | **0.95** | **0.86** | **0.90** | **86** |
 
-### 13. Loss and Accuracy Visualisations
-- Generates visualisations of training results
+Overall accuracy was approximately `0.99` on `1788` test samples, with macro average F1-score of `0.95` and weighted average F1-score of `0.99`.
 
-### 14. Confusion Matrix Report Visualisation
-- Displays confusion matrices and evaluation metrics such as precision and recall
+The most important result is the `Fake` class F1-score of `0.90`, since fake postings are the minority class and are the target the model is meant to catch. The branch evaluation showed that the NLP branch carried most of the predictive signal, while the numerical branch added secondary structured information.
 
-### 15. Hyperparameter GRU / Hidden Layer Dimension Tuning
-- Tunes model dimension-related hyperparameters
+## Report
 
-## Important Note
+The full technical write-up is available here:
 
-Avoid running **Hyperparameter GRU / Hidden Layer Dimension Tuning** unless necessary.  
-This step is computationally expensive and, in our best recorded run, took around **5 hours**.
+[`DL_Report_Group 23.pdf`](DL_Report_Group%2023.pdf)
+
+It contains the detailed background, preprocessing decisions, model design, experiment setup, and discussion of results.
