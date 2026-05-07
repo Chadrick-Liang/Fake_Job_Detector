@@ -6,6 +6,8 @@ The final model combines an NLP branch for job-posting text with a numerical-fea
 
 For the full methodology, experiments and discussion, see [`DL_Report_Group 23.pdf`](DL_Report_Group%2023.pdf).
 
+![Problem statement and class imbalance](data/problem_statement.png)
+
 ![Model architecture diagram](data/model_architecture.png)
 
 ## Repository Structure
@@ -83,6 +85,8 @@ Full training can take up to several hours. The main model training is manageabl
 
 For a quicker inspection of the project, use the existing notebooks and saved weights instead of rerunning every experiment.
 
+![Training curves](data/training.png)
+
 ## Model Summary
 
 The primary model is implemented in `model_construction/model.py` as `FakeJobDetector`.
@@ -92,6 +96,8 @@ It uses two branches:
 - Text branch: token embeddings, a 2-layer bidirectional GRU and multi-head attention pooling.
 - Numerical branch: two fully connected layers with ReLU and dropout.
 - Final classifier: concatenates the text and numerical representations and outputs a binary fraud logit.
+
+![NLP and numerical branches](data/NLP_numerical_branches.png)
 
 Training uses sigmoid focal loss to help with class imbalance, since fraudulent postings are much rarer than real postings. The model applies a sigmoid threshold during evaluation, and the notebooks include threshold tuning to explore the precision-recall tradeoff.
 
@@ -117,6 +123,8 @@ Recorded test-set performance at threshold `0.5`:
 Overall accuracy was approximately `0.99` on `1788` test samples, with macro average F1-score of `0.95` and weighted average F1-score of `0.99`.
 
 The most important result is the `Fake` class F1-score of `0.90`, since fake postings are the minority class and are the target the model is meant to catch. The branch evaluation showed that the NLP branch carried most of the predictive signal, while the numerical branch added secondary structured information.
+
+![Model results](data/model_results.png)
 
 ## Report
 
